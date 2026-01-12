@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Wheel</title>
+    <style>
+        :root {
+            --active-color: #ff3333; /* The Araki Red */
+            --dim-opacity: 0.25;      /* Ghostly fade for non-active items */
+            --bg-color: #000000;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-color);
+            color: #fff;
+            /* Premium Font Stack: San Francisco (Mac), Segoe UI (Win), Roboto (Android) */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end; 
+            padding-right: 12%; /* Perfect golden ratio placement */
+            user-select: none;
+            -webkit-font-smoothing: antialiased; /* Crisp text rendering */
+        }
+
+        /* The wrapper ensures the dot and list never drift apart */
+        .picker-container {
+            display: flex;
+            align-items: center;
+            position: relative;
+            height: 320px; /* Tighter view window for focus */
+        }
+
+        /* THE RED DOT */
+        .indicator {
+            width: 6px;
+            height: 6px;
+            background-color: var(--active-color);
+            border-radius: 50%;
+            /* Subtle, precise glow - not a blurry mess */
+            box-shadow: 0 0 10px var(--active-color); 
+            z-index: 10;
+            margin-right: 30px; 
+        }
+
+        .scene {
+            width: 800px; /* Massive width to guarantee NO clipping */
+            height: 100%;
+            position: relative;
+            /* 2500px Perspective = Flatter, architectural isometric look */
+            perspective: 2500px; 
+            /* Shifts the vanishing point to align with the text start */
+            perspective-origin: 0% 50%; 
+            /* A sharper mask for a cleaner cut */
+            mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
+        }
+
+        .wheel {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            transform-style: preserve-3d;
+            top: 50%;
+            left: 0; 
+        }
+
+        .city-item {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 50px; 
+            line-height: 50px;
+            font-size: 20px; /* Smaller, more elegant size */
+            font-weight: 300; /* Light weight for that luxury feel */
+            letter-spacing: 0.5px; /* Slight breathing room between letters */
+            text-align: left;
+            white-space: nowrap;
+            cursor: pointer;
+            backface-visibility: hidden; 
+            opacity: var(--dim-opacity); 
+            transform-origin: 0% 50%; /* Rotates from the left anchor */
+            transition: opacity 0.4s ease, color 0.4s ease, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        /* The "Active" State - Crisp & Bright */
+        .city-item.active {
+            opacity: 1;
+            color: #fff; /* Pure white focus */
+            font-weight: 500; /* Slightly bolder active state */
+        }
+
+        /* Hover State */
+        .city-item:hover {
+            opacity: 1;
+            color: var(--active-color);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="picker-container">
+        <div class="indicator"></div>
+        <div class="scene">
+            <div class="wheel" id="wheel"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA ---
+        const cities = [
+            { name: "Atlanta, Georgia", url: "/atlanta" },
+            { name: "Paris, France", url: "https://www.paris.fr" },
+            { name: "Tokyo, Japan", url: "#" },
+            { name: "Berlin, Germany", url: "#" },
+            { name: "Oslo, Norway", url: "#" },
+            { name: "Copenhagen, Denmark", url: "#" },
+            { name: "London, UK", url: "#" },
+            { name: "Madrid, Spain", url: "#" },
+            { name: "Helsinki, Finland", url: "#" },
+            { name: "Shanghai, China", url: "#" },
+            { name: "San Francisco, USA", url: "#" },
+            { name: "Sao Paulo, Brazil", url: "#" }, // Spelling Fixed
+            { name: "Auckland, New Zealand", url: "#" },
+            { name: "Sydney, Australia", url: "#" },
+            { name: "New York, USA", url: "#" },
+            { name: "Stockholm, Sweden", url: "#" },
+            { name: "Dubai, UAE", url: "#" },
+            { name: "Seoul, South Korea", url: "#" },
+            { name: "Rome, Italy", url: "#" },
+            { name: "Toronto, Canada", url: "#" }
+        ];
+
+        const wheel = document.getElementById('wheel');
+        
+        // --- TUNING THE FEEL ---
+        // A massively increased radius makes the curve much more subtle.
+        // It feels like a giant architectural ring now, not a small tube.
+        const radius = 650; 
+        const totalItems = cities.length;
+        const theta = 360 / totalItems; 
+        
+        let cityElements = [];
+
+        // --- BUILDER ---
+        cities.forEach((city, index) => {
+            const el = document.createElement('div');
+            el.className = 'city-item';
+            el.innerText = city.name;
+            el.dataset.url = city.url;
+
+            const angle = theta * index;
+            // The math remains, but the larger radius softens the visual
+            el.style.transform = `rotateX(-${angle}deg) translateZ(${radius}px)`;
+
+            el.onclick = () => {
+                if (!hasMoved) window.location.href = city.url; 
+            };
+
+            wheel.appendChild(el);
+            cityElements.push(el);
+        });
+
+        // --- PHYSICS ENGINE ---
+        let currentRotation = 0;
+        let targetRotation = 0;
+        let isDragging = false;
+        let startY = 0;
+        let startRotation = 0;
+        let hasMoved = false; 
+        
+        // Slower, more deliberate auto-scroll
+        const autoScrollSpeed = 0.08; 
+
+        function animate() {
+            if (!isDragging) {
+                // Heavier damping (0.04) for a "heavy", luxurious stop
+                currentRotation += (targetRotation - currentRotation) * 0.04;
+                targetRotation += autoScrollSpeed; 
+            }
+            
+            // Apply rotation
+            wheel.style.transform = `translate(0, -50%) rotateX(${currentRotation}deg)`;
+
+            // --- ACTIVE STATE LOGIC ---
+            let normalizedRotation = currentRotation % 360;
+            if (normalizedRotation < 0) normalizedRotation += 360;
+            
+            // Find the item currently passing the "equator" (0 degrees)
+            const activeIndex = Math.round(normalizedRotation / theta) % totalItems;
+            
+            cityElements.forEach((el, idx) => {
+                if (idx === activeIndex) {
+                    el.classList.add('active');
+                    // Slight scale bump for the active item? 
+                    // No, let's keep it Kengo Kuma style: scale changes are cheap. 
+                    // Stick to pure opacity/color changes.
+                } else {
+                    el.classList.remove('active');
+                }
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        // --- INPUT HANDLING ---
+        window.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            hasMoved = false; 
+            startY = e.clientY;
+            startRotation = targetRotation;
+            document.body.style.cursor = "grabbing"; // Visual feedback
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const deltaY = e.clientY - startY;
+            if (Math.abs(deltaY) > 5) hasMoved = true;
+            targetRotation = startRotation + (deltaY * 0.25); // Lower sensitivity = more weight
+            currentRotation = targetRotation; 
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+            document.body.style.cursor = "default";
+        });
+
+        window.addEventListener('wheel', (e) => {
+            targetRotation += e.deltaY * 0.1;
+        });
+
+        animate();
+
+    </script>
+</body>
+</html>
